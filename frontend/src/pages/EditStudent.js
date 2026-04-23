@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function EditStudent() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -20,17 +23,27 @@ function EditStudent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Load existing student data
+  // ==========================================
+  // LOAD EXISTING STUDENT DATA
+  // ==========================================
   useEffect(() => {
     const loadStudent = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/students/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/students/${id}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         });
 
-        const data = await response.json();
+        let data;
+        const contentType = response.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          data = { message: text || "Failed to load student" };
+        }
 
         if (!response.ok) {
           throw new Error(data.message || "Failed to load student");
@@ -46,7 +59,7 @@ function EditStudent() {
           overallProgress: data.overallProgress || "not_started",
         });
       } catch (err) {
-        setError(err.message);
+        setError(err.message || "Something went wrong");
       } finally {
         setLoading(false);
       }
@@ -55,7 +68,9 @@ function EditStudent() {
     loadStudent();
   }, [id]);
 
-  // Handle changes
+  // ==========================================
+  // HANDLE CHANGES
+  // ==========================================
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -78,7 +93,9 @@ function EditStudent() {
     });
   };
 
-  // Submit updated student
+  // ==========================================
+  // SUBMIT UPDATED STUDENT
+  // ==========================================
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -99,7 +116,7 @@ function EditStudent() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/students/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/students/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -108,7 +125,15 @@ function EditStudent() {
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { message: text || "Failed to update student" };
+      }
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to update student");
@@ -116,7 +141,7 @@ function EditStudent() {
 
       navigate(`/student/${id}`);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Something went wrong");
     }
   };
 

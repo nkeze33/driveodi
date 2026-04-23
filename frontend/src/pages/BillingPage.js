@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { getToken, updateUser } from "../utils/auth";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function BillingPage() {
   const [loading, setLoading] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState("inactive");
@@ -14,7 +17,7 @@ function BillingPage() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/auth/me", {
+        const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${getToken()}`,
           },
@@ -50,7 +53,6 @@ function BillingPage() {
 
   // ==========================================
   // START FREE TRIAL
-  // Sends startWithTrial: true
   // ==========================================
   const handleStartTrial = async () => {
     try {
@@ -58,7 +60,7 @@ function BillingPage() {
       setMessage("");
 
       const res = await axios.post(
-        "http://localhost:5000/api/billing/create-checkout-session",
+        `${API_BASE_URL}/api/billing/create-checkout-session`,
         { startWithTrial: true },
         {
           headers: {
@@ -78,7 +80,6 @@ function BillingPage() {
 
   // ==========================================
   // START PAID SUBSCRIPTION IMMEDIATELY
-  // Sends startWithTrial: false
   // ==========================================
   const handleStartPaidSubscription = async () => {
     try {
@@ -86,7 +87,7 @@ function BillingPage() {
       setMessage("");
 
       const res = await axios.post(
-        "http://localhost:5000/api/billing/create-checkout-session",
+        `${API_BASE_URL}/api/billing/create-checkout-session`,
         { startWithTrial: false },
         {
           headers: {
@@ -97,7 +98,10 @@ function BillingPage() {
 
       window.location.href = res.data.url;
     } catch (error) {
-      console.error("Start paid subscription error:", error.response?.data || error.message);
+      console.error(
+        "Start paid subscription error:",
+        error.response?.data || error.message
+      );
       setMessage(
         error.response?.data?.message || "Failed to start paid subscription."
       );
@@ -108,7 +112,6 @@ function BillingPage() {
 
   // ==========================================
   // UPGRADE NOW
-  // Ends trial immediately and attempts payment
   // ==========================================
   const handleUpgradeNow = async () => {
     try {
@@ -116,7 +119,7 @@ function BillingPage() {
       setMessage("");
 
       const res = await axios.post(
-        "http://localhost:5000/api/billing/upgrade-now",
+        `${API_BASE_URL}/api/billing/upgrade-now`,
         {},
         {
           headers: {
@@ -130,7 +133,7 @@ function BillingPage() {
       // Refresh billing state after webhook has time to update DB
       setTimeout(async () => {
         try {
-          const fresh = await axios.get("http://localhost:5000/api/auth/me", {
+          const fresh = await axios.get(`${API_BASE_URL}/api/auth/me`, {
             headers: {
               Authorization: `Bearer ${getToken()}`,
             },
@@ -172,7 +175,6 @@ function BillingPage() {
 
       {message && <p style={styles.message}>{message}</p>}
 
-      {/* INACTIVE / FAILED / CANCELED */}
       {(subscriptionStatus === "inactive" ||
         subscriptionStatus === "canceled" ||
         subscriptionStatus === "past_due" ||
@@ -203,7 +205,6 @@ function BillingPage() {
         </div>
       )}
 
-      {/* TRIALING */}
       {subscriptionStatus === "trialing" && (
         <div style={styles.card}>
           <h2>Free Trial</h2>

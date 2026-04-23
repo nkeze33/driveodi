@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 // ==========================================
 // SKILL LABELS
 // ==========================================
@@ -60,19 +63,33 @@ function UpdateSkills() {
   // LOAD SKILLS
   // ==========================================
   useEffect(() => {
-    fetch(`http://localhost:5000/api/skills/student/${id}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    })
-      .then((res) => {
+    const loadSkills = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/skills/student/${id}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+
         if (res.status === 401) {
           navigate("/login");
-          return null;
+          return;
         }
-        return res.json();
-      })
-      .then((data) => {
+
+        let data;
+        const contentType = res.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          data = { message: text || "Failed to load skills" };
+        }
+
+        if (!res.ok) {
+          throw new Error(data.message || "Failed to load skills");
+        }
+
         if (data && data.skills) {
           // Merge existing backend data into defaults
           setSkills({
@@ -83,14 +100,15 @@ function UpdateSkills() {
           // If no skills returned, still show default form
           setSkills(defaultSkills);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error(err);
-        setError("Failed to load skills");
-      })
-      .finally(() => {
+        setError(err.message || "Failed to load skills");
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    loadSkills();
   }, [id, navigate]);
 
   // ==========================================
@@ -111,19 +129,24 @@ function UpdateSkills() {
     setError("");
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/skills/student/${id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ skills }),
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/api/skills/student/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ skills }),
+      });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { message: text || "Failed to update skills" };
+      }
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to update skills");
@@ -132,7 +155,7 @@ function UpdateSkills() {
       navigate(`/student/${id}`);
     } catch (err) {
       console.error(err);
-      setError(err.message);
+      setError(err.message || "Something went wrong");
     }
   };
 

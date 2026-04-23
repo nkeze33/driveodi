@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function AddLesson() {
   // Get student ID from the URL
@@ -60,20 +62,28 @@ function AddLesson() {
     };
 
     try {
-      const response = await fetch("http://localhost:5000/api/lessons", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify(payload),
-      });
+   const response = await fetch(`${API_BASE_URL}/api/lessons`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  },
+  body: JSON.stringify(payload),
+});
 
-      const data = await response.json();
+let data;
+const contentType = response.headers.get("content-type");
 
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to add lesson");
-      }
+if (contentType && contentType.includes("application/json")) {
+  data = await response.json();
+} else {
+  const text = await response.text();
+  data = { message: text || "Failed to add lesson" };
+}
+
+if (!response.ok) {
+  throw new Error(data.message || "Failed to add lesson");
+}
 
       // Go back to student profile after successful save
       navigate(`/student/${id}`);

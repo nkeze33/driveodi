@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function AddStudent() {
   const navigate = useNavigate();
 
@@ -63,7 +66,7 @@ function AddStudent() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/api/students", {
+      const response = await fetch(`${API_BASE_URL}/api/students`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -72,15 +75,23 @@ function AddStudent() {
         body: JSON.stringify(formData),
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { message: text || "Failed to create student" };
+      }
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to create student");
       }
 
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Something went wrong");
     }
   };
 
@@ -169,7 +180,7 @@ function AddStudent() {
               Create Student
             </button>
 
-            <Link to="/" className="button-secondary">
+            <Link to="/dashboard" className="button-secondary">
               Cancel
             </Link>
           </div>

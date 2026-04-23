@@ -3,6 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getToken, getUser, logout, updateUser } from "../utils/auth";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 // ==========================================
 // OVERALL PROGRESS LABELS
 // ==========================================
@@ -56,13 +59,12 @@ function Dashboard() {
 
   // ==========================================
   // LOAD CURRENT USER / BILLING STATE
-  // This runs when dashboard opens so UI always
-  // reflects the latest subscription state
+  // Keeps dashboard in sync with backend
   // ==========================================
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/auth/me", {
+        const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${getToken()}`,
           },
@@ -87,26 +89,41 @@ function Dashboard() {
   // LOAD STUDENTS
   // ==========================================
   useEffect(() => {
-    fetch("http://localhost:5000/api/students", {
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
-      },
-    })
-      .then((res) => {
+    const fetchStudents = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/students`, {
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+          },
+        });
+
         if (res.status === 401) {
           logout();
           navigate("/login");
-          return null;
+          return;
         }
 
-        return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          setStudents(data);
+        let data;
+        const contentType = res.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          throw new Error(text || "Failed to load students");
         }
-      })
-      .catch((err) => console.error(err));
+
+        if (!res.ok) {
+          throw new Error(data.message || "Failed to load students");
+        }
+
+        setStudents(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load students:", err);
+      }
+    };
+
+    fetchStudents();
   }, [navigate]);
 
   // ==========================================
@@ -154,8 +171,8 @@ function Dashboard() {
 
   // ==========================================
   // LOADING STATE
-  // Prevents UI flicker / wrong state showing
-  // briefly before auth/me finishes loading
+  // Prevents wrong state from flashing before
+  // auth/me finishes loading
   // ==========================================
   if (loadingUser) {
     return (
@@ -175,7 +192,8 @@ function Dashboard() {
           <h1 className="title">Dashboard</h1>
 
           <p className="subtitle">
-            Welcome{user?.name ? `, ${user.name}` : ""}. Manage your students and lesson records.
+            Welcome{user?.name ? `, ${user.name}` : ""}. Manage your students and
+            lesson records.
           </p>
 
           {locationText && (
@@ -190,7 +208,8 @@ function Dashboard() {
 
           {subscription === "trialing" && daysLeft !== null && (
             <div style={{ marginTop: "8px", fontWeight: "bold" }}>
-              Your trial ends in {daysLeft} day(s). A paid subscription will start automatically after it ends.
+              Your trial ends in {daysLeft} day(s). A paid subscription will
+              start automatically after it ends.
             </div>
           )}
 

@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { getToken, updateUser } from "../utils/auth";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function BillingSuccess() {
   const navigate = useNavigate();
   const [message, setMessage] = useState("Confirming your subscription...");
@@ -10,12 +13,13 @@ function BillingSuccess() {
   useEffect(() => {
     const refreshUser = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/auth/me", {
+        const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${getToken()}`,
           },
         });
 
+        // Update stored user so dashboard reflects latest billing state
         updateUser(res.data);
 
         if (res.data.subscriptionStatus === "active") {
@@ -26,8 +30,8 @@ function BillingSuccess() {
           setMessage("Payment completed.");
         }
 
-        // Go back immediately after syncing user
-        navigate("/", { replace: true });
+        // Redirect to dashboard after syncing user state
+        navigate("/dashboard", { replace: true });
       } catch (error) {
         console.error("Billing success refresh failed:", error);
         setMessage("Payment completed. Please return to dashboard.");
@@ -48,7 +52,7 @@ function BillingSuccess() {
 
         <button
           className="button"
-          onClick={() => navigate("/", { replace: true })}
+          onClick={() => navigate("/dashboard", { replace: true })}
           style={{ marginTop: "20px" }}
         >
           Go to Dashboard

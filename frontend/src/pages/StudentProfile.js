@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 // ==========================================
 // SKILL LABELS
 // Converts backend camelCase keys into
@@ -24,6 +27,7 @@ const skillLabels = {
   dualCarriageway: "Dual Carriageway",
   independentDriving: "Independent Driving",
 };
+
 // ==========================================
 // SKILL VALUE LABELS
 // Converts values → clean UI text
@@ -35,6 +39,7 @@ const skillValueLabels = {
   competent: "Competent",
   test_ready: "Test Ready",
 };
+
 // ==========================================
 // OVERALL PROGRESS LABELS
 // Converts backend values into cleaner UI text
@@ -72,6 +77,7 @@ const getDaysUntilTest = (testDate) => {
 
   return `${diffDays} day${diffDays === 1 ? "" : "s"}`;
 };
+
 // ==========================================
 // FORMAT MINUTES → HOURS + MINUTES
 // Example: 70 → "1h 10m"
@@ -92,6 +98,7 @@ const formatDuration = (minutes) => {
 
   return `${hours}h ${remainingMinutes}m`;
 };
+
 function StudentProfile() {
   // Get student ID from URL
   const { id } = useParams();
@@ -109,25 +116,41 @@ function StudentProfile() {
   // LOAD STUDENT PROFILE
   // ==========================================
   useEffect(() => {
-    fetch(`http://localhost:5000/api/students/${id}/profile`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    })
-      .then((res) => {
+    const loadProfile = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/students/${id}/profile`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+
         if (res.status === 401) {
           navigate("/login");
-          return null;
+          return;
         }
-        return res.json();
-      })
-      .then((data) => {
-        if (data) setProfile(data);
-      })
-      .catch((err) => {
+
+        let data;
+        const contentType = res.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          data = { message: text || "Failed to load student profile" };
+        }
+
+        if (!res.ok) {
+          throw new Error(data.message || "Failed to load student profile");
+        }
+
+        setProfile(data);
+      } catch (err) {
         console.error(err);
-        setError("Failed to load student profile");
-      });
+        setError(err.message || "Failed to load student profile");
+      }
+    };
+
+    loadProfile();
   }, [id, navigate]);
 
   // ==========================================
@@ -141,26 +164,31 @@ function StudentProfile() {
     if (!confirmDelete) return;
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/students/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/api/students/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { message: text || "Failed to delete student" };
+      }
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to delete student");
       }
 
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.error(err);
-      setError(err.message);
+      setError(err.message || "Something went wrong");
     }
   };
 
@@ -221,16 +249,17 @@ function StudentProfile() {
             ? new Date(student.testDate).toLocaleDateString()
             : "—"}
         </p>
+
         <p className="info-row">
           <strong>Days Until Test:</strong> {getDaysUntilTest(student.testDate)}
         </p>
 
         <p className="info-row">
-  <strong>Overall Progress:</strong>{" "}
-  <span className="badge">
-    {progressLabels[student.overallProgress] || "Not Started"}
-  </span>
-</p>
+          <strong>Overall Progress:</strong>{" "}
+          <span className="badge">
+            {progressLabels[student.overallProgress] || "Not Started"}
+          </span>
+        </p>
 
         <p className="info-row">
           <strong>Notes:</strong> {student.notes || "—"}
@@ -263,75 +292,70 @@ function StudentProfile() {
       <div className="grid grid-2">
         {/* Lessons column */}
         <div className="card">
-  <h2>Lessons</h2>
+          <h2>Lessons</h2>
 
-  {/* TOTAL DURATION */}
-  <p className="info-row">
-    <strong>Total Lessons Duration:</strong> {formatDuration(totalLessonDuration)}
-  </p>
+          <p className="info-row">
+            <strong>Total Lessons Duration:</strong>{" "}
+            {formatDuration(totalLessonDuration)}
+          </p>
 
-  {lessons.length === 0 ? (
-    <p className="empty-text">No lessons yet.</p>
-  ) : (
-    lessons.map((lesson) => (
-      <div key={lesson._id} className="lesson-item">
-        
-        {/* DATE */}
-        <div className="lesson-header">
-          <strong className="lesson-date">
-            {lesson.lessonDate
-              ? new Date(lesson.lessonDate).toLocaleDateString()
-              : "—"}
-          </strong>
+          {lessons.length === 0 ? (
+            <p className="empty-text">No lessons yet.</p>
+          ) : (
+            lessons.map((lesson) => (
+              <div key={lesson._id} className="lesson-item">
+                <div className="lesson-header">
+                  <strong className="lesson-date">
+                    {lesson.lessonDate
+                      ? new Date(lesson.lessonDate).toLocaleDateString()
+                      : "—"}
+                  </strong>
+                </div>
+
+                <div className="lesson-grid">
+                  <div>
+                    <span className="label">Duration</span>
+                    <div className="value">
+                      {formatDuration(lesson.durationMinutes)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="label">Rating</span>
+                    <div className="value">
+                      {lesson.lessonRating ? `${lesson.lessonRating}/5` : "—"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="label">Next Focus</span>
+                    <div className="value">
+                      {lesson.nextLessonFocus &&
+                      lesson.nextLessonFocus.trim() !== ""
+                        ? lesson.nextLessonFocus
+                        : "Not recorded"}
+                    </div>
+                  </div>
+                </div>
+
+                {lesson.topicsCovered && lesson.topicsCovered.length > 0 && (
+                  <div className="lesson-section">
+                    <span className="label">Topics Covered</span>
+                    <div className="value">{lesson.topicsCovered.join(", ")}</div>
+                  </div>
+                )}
+
+                {lesson.notes && (
+                  <div className="lesson-section">
+                    <span className="label">Notes</span>
+                    <div className="value">{lesson.notes}</div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
 
-        {/* MAIN INFO GRID */}
-        <div className="lesson-grid">
-          <div>
-            <span className="label">Duration</span>
-            <div className="value">
-                 {formatDuration(lesson.durationMinutes)}
-            </div>
-          </div>
-
-          <div>
-            <span className="label">Rating</span>
-            <div className="value">
-              {lesson.lessonRating ? `${lesson.lessonRating}/5` : "—"}
-            </div>
-          </div>
-
-          <div>
-            <span className="label">Next Focus</span>
-            <div className="value">
-              {lesson.nextLessonFocus && lesson.nextLessonFocus.trim() !== ""
-                ? lesson.nextLessonFocus
-                : "Not recorded"}
-            </div>
-          </div>
-        </div>
-
-        {/* TOPICS */}
-        {lesson.topicsCovered && lesson.topicsCovered.length > 0 && (
-          <div className="lesson-section">
-            <span className="label">Topics Covered</span>
-            <div className="value">
-              {lesson.topicsCovered.join(", ")}
-            </div>
-          </div>
-        )}
-
-        {/* NOTES */}
-        {lesson.notes && (
-          <div className="lesson-section">
-            <span className="label">Notes</span>
-            <div className="value">{lesson.notes}</div>
-          </div>
-        )}
-      </div>
-    ))
-  )}
-</div>
         {/* Skills column */}
         <div className="card">
           <h2>Skill Progress</h2>
@@ -342,10 +366,10 @@ function StudentProfile() {
                 <div key={skill} className="skill-item">
                   <strong>{skillLabels[skill] || skill}</strong>
                   <div>
-                        <span className={`badge ${value}`}>
-                          {skillValueLabels[value] || value}
-                          </span>
-                          </div>
+                    <span className={`badge ${value}`}>
+                      {skillValueLabels[value] || value}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

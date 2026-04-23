@@ -11,11 +11,17 @@ function BillingCancel() {
         <p>No changes were made to your subscription.</p>
 
         <div style={styles.buttonRow}>
-          <button style={styles.primaryBtn} onClick={() => navigate("/billing")}>
+          <button
+            style={styles.primaryBtn}
+            onClick={() => navigate("/billing")}
+          >
             Back to Billing
           </button>
 
-          <button style={styles.secondaryBtn} onClick={() => navigate("/")}>
+          <button
+            style={styles.secondaryBtn}
+            onClick={() => navigate("/dashboard")}
+          >
             Go to Dashboard
           </button>
         </div>
