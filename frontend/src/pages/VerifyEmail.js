@@ -5,8 +5,8 @@ function VerifyEmail() {
   // ==================================================
   // API BASE URL
   // ==================================================
- const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_BASE_URL =
+    process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   // ==================================================
   // URL PARAMS
@@ -69,12 +69,11 @@ function VerifyEmail() {
       setError("Invalid or missing verification token.");
       setLoading(false);
     }
-  }, [searchParams]);
+  }, [searchParams, API_BASE_URL]);
 
   return (
     <div className="auth-page">
       <div className="auth-shell">
-        {/* LEFT BRAND PANEL */}
         <div className="auth-brand-panel">
           <p className="auth-brand-badge">Driveodi</p>
           <h1>Order in Driving Intelligence.</h1>
@@ -84,7 +83,6 @@ function VerifyEmail() {
           </p>
         </div>
 
-        {/* RIGHT VERIFY CARD */}
         <div className="auth-card" style={{ textAlign: "center" }}>
           <h2>Email Verification</h2>
 
