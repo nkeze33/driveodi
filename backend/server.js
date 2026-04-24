@@ -17,7 +17,7 @@ const skillRoutes = require("./routes/skillRoutes");
 const billingRoutes = require("./routes/billingRoutes");
 
 const app = express();
-
+app.set("trust proxy", 1);
 connectDB();
 
 /**
