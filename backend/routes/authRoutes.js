@@ -111,11 +111,23 @@ router.post("/register", async (req, res) => {
 
     const savedUser = await user.save();
 
-    await sendVerificationEmail({
-      to: savedUser.email,
-      name: savedUser.name,
-      token: verificationToken,
-    });
+    try {
+      await sendVerificationEmail({
+        to: savedUser.email,
+        name: savedUser.name,
+        token: verificationToken,
+      });
+    } catch (emailError) {
+      console.error("Verification email failed:", emailError.message);
+
+      // Roll back user creation if verification email cannot be sent.
+      await User.findByIdAndDelete(savedUser._id);
+
+      return res.status(500).json({
+        message:
+          "Registration failed because the verification email could not be sent. Please try again later.",
+      });
+    }
 
     return res.status(201).json({
       message:
@@ -210,11 +222,20 @@ router.post("/resend-verification", async (req, res) => {
 
     await user.save();
 
-    await sendVerificationEmail({
-      to: user.email,
-      name: user.name,
-      token: newToken,
-    });
+    try {
+      await sendVerificationEmail({
+        to: user.email,
+        name: user.name,
+        token: newToken,
+      });
+    } catch (emailError) {
+      console.error("Resend verification email failed:", emailError.message);
+
+      return res.status(500).json({
+        message:
+          "Could not resend verification email. Please try again later.",
+      });
+    }
 
     return res.status(200).json({
       message: "Verification email sent again. Please check your inbox.",
