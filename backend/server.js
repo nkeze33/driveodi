@@ -37,7 +37,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "http://localhost:5173",
+      "https://dainty-sunflower-0652fc.netlify.app/",
       process.env.CLIENT_URL,
     ].filter(Boolean),
     credentials: true,
