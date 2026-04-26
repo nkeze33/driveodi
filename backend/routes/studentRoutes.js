@@ -106,6 +106,10 @@ const validateAndCleanStudentInput = (body) => {
     return { error: "Invalid overall progress value." };
   }
 
+  if (!cleaned.startDate) {
+  return { error: "Start date is required." };
+}
+
   const dateError = validateDates(cleaned.startDate, cleaned.testDate);
 
   if (dateError) {
