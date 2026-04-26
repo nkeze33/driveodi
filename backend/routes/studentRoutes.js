@@ -8,16 +8,43 @@ const SkillProgress = require("../models/SkillProgress");
 const authMiddleware = require("../middleware/authMiddleware");
 
 // ==========================================
-// DATE VALIDATION HELPER
+// VALIDATION HELPERS
 // ==========================================
+const sanitizeText = (value) => {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .trim();
+};
+
+const isValidEmail = (email) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+const isValidPhone = (phone) => {
+  return /^\+?\d{7,15}$/.test(phone);
+};
+
 const validateDates = (startDate, testDate) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   if (startDate) {
     const start = new Date(startDate);
+
+    if (Number.isNaN(start.getTime())) {
+      return "Start date is invalid.";
+    }
+
     if (start < today) {
       return "Start date cannot be in the past.";
+    }
+  }
+
+  if (testDate) {
+    const test = new Date(testDate);
+
+    if (Number.isNaN(test.getTime())) {
+      return "Test date is invalid.";
     }
   }
 
@@ -33,6 +60,61 @@ const validateDates = (startDate, testDate) => {
   return null;
 };
 
+const validateAndCleanStudentInput = (body) => {
+  const cleaned = {
+    fullName: sanitizeText(body.fullName),
+    phone: sanitizeText(body.phone),
+    email: sanitizeText(body.email).toLowerCase(),
+    startDate: body.startDate || null,
+    testDate: body.testDate || null,
+    notes: sanitizeText(body.notes),
+    overallProgress: sanitizeText(body.overallProgress || "not_started"),
+  };
+
+  const allowedProgress = [
+    "not_started",
+    "needs_work",
+    "improving",
+    "competent",
+    "test_ready",
+  ];
+
+  if (!cleaned.fullName) {
+    return { error: "Full name is required." };
+  }
+
+  if (cleaned.fullName.length < 2 || cleaned.fullName.length > 80) {
+    return { error: "Full name must be between 2 and 80 characters." };
+  }
+
+  if (cleaned.phone && !isValidPhone(cleaned.phone)) {
+    return {
+      error:
+        "Invalid phone number. Use 7 to 15 digits, with optional + at the start.",
+    };
+  }
+
+  if (cleaned.email && !isValidEmail(cleaned.email)) {
+    return { error: "Invalid email address." };
+  }
+
+  if (cleaned.notes.length > 1000) {
+    return { error: "Notes cannot be more than 1000 characters." };
+  }
+
+  if (!allowedProgress.includes(cleaned.overallProgress)) {
+    return { error: "Invalid overall progress value." };
+  }
+
+  const dateError = validateDates(cleaned.startDate, cleaned.testDate);
+
+  if (dateError) {
+    return { error: dateError };
+  }
+
+  return { cleaned };
+};
+
 // Protect all routes
 router.use(authMiddleware);
 
@@ -42,36 +124,32 @@ router.use(authMiddleware);
    ========================================================= */
 router.post("/", async (req, res) => {
   try {
-    const {
-      fullName,
-      phone,
-      email,
-      startDate,
-      testDate,
-      notes,
-      overallProgress,
-    } = req.body;
+    const { cleaned, error } = validateAndCleanStudentInput(req.body);
 
-    const dateError = validateDates(startDate, testDate);
-    if (dateError) {
-      return res.status(400).json({ message: dateError });
+    if (error) {
+      return res.status(400).json({ message: error });
     }
 
     const student = new Student({
       instructorId: req.user._id,
-      fullName,
-      phone,
-      email,
-      startDate,
-      testDate,
-      notes,
-      overallProgress,
+      fullName: cleaned.fullName,
+      phone: cleaned.phone,
+      email: cleaned.email,
+      startDate: cleaned.startDate,
+      testDate: cleaned.testDate,
+      notes: cleaned.notes,
+      overallProgress: cleaned.overallProgress,
     });
 
     const savedStudent = await student.save();
-    res.status(201).json(savedStudent);
+
+    return res.status(201).json(savedStudent);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Create student error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to create student.",
+    });
   }
 });
 
@@ -85,9 +163,13 @@ router.get("/", async (req, res) => {
       instructorId: req.user._id,
     }).sort({ createdAt: -1 });
 
-    res.json(students);
+    return res.json(students);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Get students error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to load students.",
+    });
   }
 });
 
@@ -116,13 +198,17 @@ router.get("/:id/profile", async (req, res) => {
       instructorId: req.user._id,
     });
 
-    res.json({
+    return res.json({
       student,
       lessons,
       skillProgress,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Get student profile error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to load student profile.",
+    });
   }
 });
 
@@ -141,9 +227,13 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    res.json(student);
+    return res.json(student);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Get student error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to load student.",
+    });
   }
 });
 
@@ -153,11 +243,10 @@ router.get("/:id", async (req, res) => {
    ========================================================= */
 router.put("/:id", async (req, res) => {
   try {
-    const { startDate, testDate } = req.body;
+    const { cleaned, error } = validateAndCleanStudentInput(req.body);
 
-    const dateError = validateDates(startDate, testDate);
-    if (dateError) {
-      return res.status(400).json({ message: dateError });
+    if (error) {
+      return res.status(400).json({ message: error });
     }
 
     const updatedStudent = await Student.findOneAndUpdate(
@@ -165,17 +254,29 @@ router.put("/:id", async (req, res) => {
         _id: req.params.id,
         instructorId: req.user._id,
       },
-      req.body,
-      { new: true }
+      {
+        fullName: cleaned.fullName,
+        phone: cleaned.phone,
+        email: cleaned.email,
+        startDate: cleaned.startDate,
+        testDate: cleaned.testDate,
+        notes: cleaned.notes,
+        overallProgress: cleaned.overallProgress,
+      },
+      { new: true, runValidators: true }
     );
 
     if (!updatedStudent) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    res.json(updatedStudent);
+    return res.json(updatedStudent);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Update student error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to update student.",
+    });
   }
 });
 
@@ -194,9 +295,13 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    res.json({ message: "Student deleted successfully" });
+    return res.json({ message: "Student deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Delete student error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to delete student.",
+    });
   }
 });
 
