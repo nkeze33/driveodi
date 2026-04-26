@@ -6,8 +6,6 @@ const API_BASE_URL =
 
 function AddStudent() {
   const navigate = useNavigate();
-
-  // Get today's date in YYYY-MM-DD format for date validation
   const today = new Date().toISOString().split("T")[0];
 
   const [formData, setFormData] = useState({
@@ -21,7 +19,46 @@ function AddStudent() {
 
   const [error, setError] = useState("");
 
-  // Handle input changes
+  const validateForm = () => {
+    const fullName = formData.fullName.trim();
+    const phone = formData.phone.trim();
+    const email = formData.email.trim();
+
+    if (!fullName) {
+      return "Full name is required.";
+    }
+
+    if (fullName.length < 2) {
+      return "Full name must be at least 2 characters.";
+    }
+
+    if (phone && !/^\+?\d{7,15}$/.test(phone)) {
+      return "Enter a valid phone number. Use 7 to 15 digits, with optional + at the start.";
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return "Enter a valid email address.";
+    }
+
+    if (formData.startDate && formData.startDate < today) {
+      return "Start date cannot be earlier than today.";
+    }
+
+    if (
+      formData.startDate &&
+      formData.testDate &&
+      formData.testDate < formData.startDate
+    ) {
+      return "Test date cannot be earlier than the start date.";
+    }
+
+    if (formData.notes.length > 1000) {
+      return "Notes cannot be more than 1000 characters.";
+    }
+
+    return "";
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -31,8 +68,6 @@ function AddStudent() {
         [name]: value,
       };
 
-      // If start date changes and test date is now earlier than start date,
-      // clear the test date so the user is forced to choose a valid one.
       if (
         name === "startDate" &&
         updated.testDate &&
@@ -45,25 +80,38 @@ function AddStudent() {
     });
   };
 
-  // Submit form
+  const handlePhoneChange = (e) => {
+    let value = e.target.value;
+
+    // Allow only one optional + at the beginning, then digits only
+    value = value.replace(/[^\d+]/g, "");
+    value = value.replace(/(?!^)\+/g, "");
+
+    setFormData((prev) => ({
+      ...prev,
+      phone: value,
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    // Frontend validation rules
-    if (formData.startDate && formData.startDate < today) {
-      setError("Start date cannot be earlier than today.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
-    if (
-      formData.startDate &&
-      formData.testDate &&
-      formData.testDate < formData.startDate
-    ) {
-      setError("Test date cannot be earlier than the start date.");
-      return;
-    }
+    const payload = {
+      fullName: formData.fullName.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim().toLowerCase(),
+      startDate: formData.startDate,
+      testDate: formData.testDate,
+      notes: formData.notes.trim(),
+    };
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/students`, {
@@ -72,7 +120,7 @@ function AddStudent() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       let data;
@@ -113,23 +161,28 @@ function AddStudent() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Full Name</label>
+            <label>Full Name *</label>
             <input
               type="text"
               name="fullName"
               value={formData.fullName}
               onChange={handleChange}
               required
+              maxLength="80"
+              placeholder="e.g. John Smith"
             />
           </div>
 
           <div className="form-group">
             <label>Phone</label>
             <input
-              type="text"
+              type="tel"
               name="phone"
               value={formData.phone}
-              onChange={handleChange}
+              onChange={handlePhoneChange}
+              placeholder="e.g. +447123456789"
+              maxLength="16"
+              inputMode="tel"
             />
           </div>
 
@@ -140,6 +193,8 @@ function AddStudent() {
               name="email"
               value={formData.email}
               onChange={handleChange}
+              maxLength="120"
+              placeholder="e.g. student@email.com"
             />
           </div>
 
@@ -172,6 +227,8 @@ function AddStudent() {
               value={formData.notes}
               onChange={handleChange}
               rows="4"
+              maxLength="1000"
+              placeholder="Optional notes about the student"
             />
           </div>
 
