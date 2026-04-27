@@ -4,23 +4,47 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
 const router = express.Router();
+
 const User = require("../models/User");
 const requireAuth = require("../middleware/authMiddleware");
 const { sendVerificationEmail } = require("../utils/sendEmail");
 
 // ======================================================
-// HELPERS
+// VALIDATION / CLEANING HELPERS
 // ======================================================
+
+// Removes risky angle brackets from text input.
+// This helps reduce stored script injection attempts.
+const sanitizeText = (value) => {
+  return String(value || "")
+    .replace(/[<>]/g, "")
+    .trim();
+};
+
+// Basic email format validation.
 const isValidEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 };
 
+// Password rule:
+// - at least 8 characters
+// - uppercase
+// - lowercase
+// - number
+// - special character
 const isStrongPassword = (password) => {
   return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(
     password
   );
 };
 
+// Generates a random email verification token.
+const generateVerificationToken = () => {
+  return crypto.randomBytes(32).toString("hex");
+};
+
+// Only sends safe user data to the frontend.
+// Never send password or verification token fields.
 const buildSafeUser = (user) => ({
   id: user._id,
   name: user.name,
@@ -33,36 +57,50 @@ const buildSafeUser = (user) => ({
   trialEndDate: user.trialEndDate || null,
 });
 
-const generateVerificationToken = () => {
-  return crypto.randomBytes(32).toString("hex");
-};
-
 // ======================================================
 // REGISTER
 // POST /api/auth/register
 // ======================================================
 router.post("/register", async (req, res) => {
   try {
-    let { name, email, password, city, country, agreedToTerms } = req.body;
+    // Clean incoming registration fields.
+    const name = sanitizeText(req.body.name);
+    const email = sanitizeText(req.body.email).toLowerCase();
+    const password = String(req.body.password || "");
+    const city = sanitizeText(req.body.city);
+    const country = sanitizeText(req.body.country);
+    const agreedToTerms = req.body.agreedToTerms;
 
-    name = String(name || "").trim();
-    email = String(email || "").trim().toLowerCase();
-    password = String(password || "");
-    city = String(city || "").trim();
-    country = String(country || "").trim();
-
+    // Required fields.
     if (!name || !email || !password) {
       return res.status(400).json({
         message: "Please fill in all required fields.",
       });
     }
 
-    if (!isValidEmail(email)) {
+    // Name length validation.
+    if (name.length < 2 || name.length > 80) {
+      return res.status(400).json({
+        message: "Name must be between 2 and 80 characters.",
+      });
+    }
+
+    // Email length + format validation.
+    if (email.length > 120 || !isValidEmail(email)) {
       return res.status(400).json({
         message: "Please enter a valid email address.",
       });
     }
 
+    // Password length guard.
+    // Prevents extremely large payload abuse.
+    if (password.length > 128) {
+      return res.status(400).json({
+        message: "Password is too long.",
+      });
+    }
+
+    // Strong password validation.
     if (!isStrongPassword(password)) {
       return res.status(400).json({
         message:
@@ -70,12 +108,27 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    // Optional location length validation.
+    if (city.length > 80) {
+      return res.status(400).json({
+        message: "City cannot be more than 80 characters.",
+      });
+    }
+
+    if (country.length > 80) {
+      return res.status(400).json({
+        message: "Country cannot be more than 80 characters.",
+      });
+    }
+
+    // Terms must be explicitly accepted.
     if (agreedToTerms !== true) {
       return res.status(400).json({
         message: "You must agree to the Terms of Use and Privacy Policy.",
       });
     }
 
+    // Prevent duplicate accounts.
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
@@ -84,10 +137,14 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    // Hash password before saving.
     const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Create email verification token.
     const verificationToken = generateVerificationToken();
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
+    // Prepare new user.
     const user = new User({
       name,
       email,
@@ -98,9 +155,13 @@ router.post("/register", async (req, res) => {
       },
       agreedToTerms: true,
       agreedToTermsAt: new Date(),
+
+      // Email verification fields.
       isEmailVerified: false,
       emailVerificationToken: verificationToken,
       emailVerificationExpires: verificationExpires,
+
+      // Subscription defaults.
       subscriptionStatus: "inactive",
       isSubscriptionActive: false,
       trialStartDate: null,
@@ -109,6 +170,8 @@ router.post("/register", async (req, res) => {
       stripeSubscriptionId: "",
     });
 
+    // Save user first, then attempt to send email.
+    // If email fails, we roll back the user creation.
     const savedUser = await user.save();
 
     try {
@@ -120,7 +183,7 @@ router.post("/register", async (req, res) => {
     } catch (emailError) {
       console.error("Verification email failed:", emailError.message);
 
-      // Roll back user creation if verification email cannot be sent.
+      // Roll back user if verification email cannot be sent.
       await User.findByIdAndDelete(savedUser._id);
 
       return res.status(500).json({
@@ -156,6 +219,7 @@ router.get("/verify-email", async (req, res) => {
       });
     }
 
+    // Token should match an unexpired record.
     const user = await User.findOne({
       emailVerificationToken: token,
       emailVerificationExpires: { $gt: new Date() },
@@ -167,6 +231,7 @@ router.get("/verify-email", async (req, res) => {
       });
     }
 
+    // Mark user as verified and remove token.
     user.isEmailVerified = true;
     user.emailVerificationToken = "";
     user.emailVerificationExpires = null;
@@ -191,12 +256,11 @@ router.get("/verify-email", async (req, res) => {
 // ======================================================
 router.post("/resend-verification", async (req, res) => {
   try {
-    let { email } = req.body;
-    email = String(email || "").trim().toLowerCase();
+    const email = sanitizeText(req.body.email).toLowerCase();
 
-    if (!email) {
+    if (!email || !isValidEmail(email)) {
       return res.status(400).json({
-        message: "Email is required.",
+        message: "Please enter a valid email address.",
       });
     }
 
@@ -255,12 +319,17 @@ router.post("/resend-verification", async (req, res) => {
 // ======================================================
 router.post("/login", async (req, res) => {
   try {
-    let { email, password } = req.body;
+    const email = sanitizeText(req.body.email).toLowerCase();
+    const password = String(req.body.password || "");
 
-    email = String(email || "").trim().toLowerCase();
-    password = String(password || "");
+    // Keep login errors generic to avoid revealing account details.
+    if (!email || !password || !isValidEmail(email)) {
+      return res.status(400).json({
+        message: "Invalid credentials",
+      });
+    }
 
-    if (!email || !password) {
+    if (password.length > 128) {
       return res.status(400).json({
         message: "Invalid credentials",
       });
@@ -297,6 +366,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Sign short user identity into JWT.
     const token = jwt.sign(
       {
         userId: user._id,
