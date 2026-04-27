@@ -3,6 +3,7 @@
 // ==========================================
 const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const User = require("../models/User");
 const requireAuth = require("../middleware/authMiddleware");
 
@@ -11,10 +12,40 @@ const router = express.Router();
 // ==========================================
 // HELPERS
 // ==========================================
+
+// Subscription statuses that should unlock app access.
 const hasAccessStatus = (status) => {
   return status === "trialing" || status === "active";
 };
 
+// Ensures required Stripe/URL environment variables exist.
+// This gives clear errors instead of silent checkout failures.
+const checkBillingEnv = () => {
+  const requiredEnvVars = [
+    "STRIPE_SECRET_KEY",
+    "STRIPE_MONTHLY_PRICE_ID",
+    "CLIENT_URL",
+  ];
+
+  const missing = requiredEnvVars.filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    return `Missing billing environment variable(s): ${missing.join(", ")}`;
+  }
+
+  return null;
+};
+
+// Ensures webhook secret exists before verifying Stripe webhook events.
+const checkWebhookEnv = () => {
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    return "Missing STRIPE_WEBHOOK_SECRET.";
+  }
+
+  return null;
+};
+
+// Builds the billing fields we store on the user record.
 const buildSubscriptionUpdate = (subscription) => ({
   stripeSubscriptionId: subscription.id,
   subscriptionStatus: subscription.status,
@@ -39,13 +70,39 @@ const buildSubscriptionUpdate = (subscription) => ({
 // ==========================================
 router.post("/create-checkout-session", requireAuth, async (req, res) => {
   try {
+    const envError = checkBillingEnv();
+
+    if (envError) {
+      console.error(envError);
+      return res.status(500).json({
+        message: "Billing is not configured correctly.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
-    const { startWithTrial } = req.body || {};
+
+    // startWithTrial must be boolean if provided.
+    // If omitted, we default to true.
+    const startWithTrial =
+      req.body.startWithTrial === undefined ? true : req.body.startWithTrial;
+
+    if (typeof startWithTrial !== "boolean") {
+      return res.status(400).json({
+        message: "Invalid billing request.",
+      });
+    }
 
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        message: "Please verify your email before starting a subscription.",
+      });
+    }
+
+    // Prevent duplicate checkout if user already has usable access.
     if (user.stripeSubscriptionId && hasAccessStatus(user.subscriptionStatus)) {
       return res.status(400).json({
         message: "You already have an active or trial subscription.",
@@ -54,6 +111,7 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
 
     let customerId = user.stripeCustomerId;
 
+    // Create Stripe customer if user does not already have one.
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
@@ -70,16 +128,19 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
       });
     }
 
+    // Attach userId to subscription metadata so webhook can find the user.
     const subscriptionData = {
       metadata: {
         userId: user._id.toString(),
       },
     };
 
-    if (startWithTrial !== false) {
+    // Apply 30-day free trial unless explicitly disabled.
+    if (startWithTrial) {
       subscriptionData.trial_period_days = 30;
     }
 
+    // Create Stripe Checkout session.
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -107,7 +168,7 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
     console.error("Stripe checkout error:", error.message);
 
     return res.status(500).json({
-      message: "Failed to create checkout session",
+      message: "Failed to create checkout session.",
     });
   }
 });
@@ -118,6 +179,15 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
 // ==========================================
 router.post("/upgrade-now", requireAuth, async (req, res) => {
   try {
+    const envError = checkBillingEnv();
+
+    if (envError) {
+      console.error(envError);
+      return res.status(500).json({
+        message: "Billing is not configured correctly.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -148,7 +218,7 @@ router.post("/upgrade-now", requireAuth, async (req, res) => {
     console.error("Upgrade now error:", error.message);
 
     return res.status(500).json({
-      message: "Failed to upgrade subscription now",
+      message: "Failed to upgrade subscription now.",
     });
   }
 });
@@ -159,10 +229,21 @@ router.post("/upgrade-now", requireAuth, async (req, res) => {
 // ==========================================
 router.post("/create-portal-session", requireAuth, async (req, res) => {
   try {
+    const envError = checkBillingEnv();
+
+    if (envError) {
+      console.error(envError);
+      return res.status(500).json({
+        message: "Billing is not configured correctly.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
 
     if (!user || !user.stripeCustomerId) {
-      return res.status(404).json({ message: "Stripe customer not found." });
+      return res.status(404).json({
+        message: "Stripe customer not found.",
+      });
     }
 
     const portalSession = await stripe.billingPortal.sessions.create({
@@ -175,7 +256,7 @@ router.post("/create-portal-session", requireAuth, async (req, res) => {
     console.error("Stripe portal error:", error.message);
 
     return res.status(500).json({
-      message: "Failed to create portal session",
+      message: "Failed to create portal session.",
     });
   }
 });
@@ -188,8 +269,20 @@ router.post("/webhook", async (req, res) => {
   let event;
 
   try {
+    const webhookEnvError = checkWebhookEnv();
+
+    if (webhookEnvError) {
+      console.error(webhookEnvError);
+      return res.status(500).send("Webhook is not configured correctly.");
+    }
+
     const signature = req.headers["stripe-signature"];
 
+    if (!signature) {
+      return res.status(400).send("Missing Stripe signature.");
+    }
+
+    // Verifies that the event really came from Stripe.
     event = stripe.webhooks.constructEvent(
       req.body,
       signature,
@@ -206,7 +299,7 @@ router.post("/webhook", async (req, res) => {
     switch (event.type) {
       // ==========================================
       // CHECKOUT COMPLETED
-      // This immediately activates trial/paid access
+      // Immediately activates trial/paid access
       // by retrieving the subscription from Stripe.
       // ==========================================
       case "checkout.session.completed": {
@@ -218,13 +311,18 @@ router.post("/webhook", async (req, res) => {
           subscription: session.subscription,
         });
 
+        if (!session.metadata?.userId) {
+          console.error("Checkout session missing userId metadata.");
+          break;
+        }
+
         if (session.mode === "subscription" && session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(
             session.subscription
           );
 
           const updatedUser = await User.findByIdAndUpdate(
-            session.metadata?.userId,
+            session.metadata.userId,
             {
               stripeCustomerId: session.customer,
               ...buildSubscriptionUpdate(subscription),
@@ -258,6 +356,7 @@ router.post("/webhook", async (req, res) => {
 
         let updatedUser = null;
 
+        // Prefer direct lookup by userId from subscription metadata.
         if (userId) {
           updatedUser = await User.findByIdAndUpdate(
             userId,
@@ -269,6 +368,7 @@ router.post("/webhook", async (req, res) => {
           );
         }
 
+        // Fallback to Stripe customer ID.
         if (!updatedUser) {
           updatedUser = await User.findOneAndUpdate(
             { stripeCustomerId: subscription.customer },
@@ -359,7 +459,7 @@ router.post("/webhook", async (req, res) => {
     console.error("Webhook processing error:", error.message);
 
     return res.status(500).json({
-      message: "Webhook handling failed",
+      message: "Webhook handling failed.",
     });
   }
 });
