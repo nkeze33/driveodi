@@ -4,17 +4,23 @@ import { Link } from "react-router-dom";
 function Register() {
   // ==================================================
   // API BASE URL
+  // Uses live backend if REACT_APP_API_URL exists,
+  // otherwise falls back to local backend.
   // ==================================================
   const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:5000";
+    process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   // ==================================================
   // FORM STATE
+  // Stores all registration form values.
+  // confirmPassword is only used on the frontend
+  // and should NOT be saved in the database.
   // ==================================================
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
+    confirmPassword: "",
     city: "",
     country: "",
     agreedToTerms: false,
@@ -22,6 +28,8 @@ function Register() {
 
   // ==================================================
   // UI STATE
+  // Controls error messages, success messages,
+  // and loading state while the form submits.
   // ==================================================
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -29,6 +37,7 @@ function Register() {
 
   // ==================================================
   // HANDLE INPUT CHANGES
+  // Handles normal text inputs and checkbox inputs.
   // ==================================================
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -41,12 +50,14 @@ function Register() {
 
   // ==================================================
   // RESET FORM
+  // Clears the form after successful registration.
   // ==================================================
   const resetForm = () => {
     setFormData({
       name: "",
       email: "",
       password: "",
+      confirmPassword: "",
       city: "",
       country: "",
       agreedToTerms: false,
@@ -55,7 +66,9 @@ function Register() {
 
   // ==================================================
   // SAFELY READ API RESPONSE
-  // Handles both JSON and plain text responses
+  // Handles both JSON and plain text responses.
+  // This prevents the app from crashing if the backend
+  // returns plain text instead of JSON.
   // ==================================================
   const parseResponse = async (response) => {
     const contentType = response.headers.get("content-type");
@@ -69,22 +82,55 @@ function Register() {
   };
 
   // ==================================================
+  // VALIDATE FORM BEFORE SUBMITTING
+  // Stops bad data before it reaches the backend.
+  // ==================================================
+  const validateForm = () => {
+    if (formData.password.length < 8) {
+      return "Password must be at least 8 characters.";
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      return "Passwords do not match.";
+    }
+
+    if (!formData.agreedToTerms) {
+      return "You must agree to the Terms of Use and Privacy Policy.";
+    }
+
+    return "";
+  };
+
+  // ==================================================
   // SUBMIT REGISTRATION FORM
+  // Sends registration data to the backend.
+  // confirmPassword is removed before sending because
+  // the backend does not need to store or process it.
   // ==================================================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     setError("");
     setSuccess("");
+
+    const validationError = validateForm();
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
 
     try {
+      const { confirmPassword, ...registrationData } = formData;
+
       const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(registrationData),
       });
 
       const data = await parseResponse(response);
@@ -174,6 +220,20 @@ function Register() {
                 Use at least 8 characters with uppercase, lowercase, number,
                 and special character.
               </small>
+            </div>
+
+            {/* Confirm Password */}
+            <div className="form-group">
+              <label htmlFor="confirmPassword">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+                disabled={loading}
+              />
             </div>
 
             {/* Location */}
