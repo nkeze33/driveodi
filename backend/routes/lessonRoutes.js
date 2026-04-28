@@ -34,6 +34,14 @@ const isValidDate = (date) => {
   return !Number.isNaN(parsedDate.getTime());
 };
 
+// Converts a date to midnight.
+// This lets us compare dates without time causing false errors.
+const startOfDay = (date) => {
+  const parsedDate = new Date(date);
+  parsedDate.setHours(0, 0, 0, 0);
+  return parsedDate;
+};
+
 // ==========================================
 // CLEAN + VALIDATE LESSON INPUT
 // ==========================================
@@ -53,7 +61,6 @@ const validateAndCleanLessonInput = (body) => {
       : [],
   };
 
-  // Student ID is required because every lesson must belong to a student.
   if (!cleaned.studentId) {
     return { error: "Student ID is required." };
   }
@@ -62,7 +69,6 @@ const validateAndCleanLessonInput = (body) => {
     return { error: "Invalid student ID." };
   }
 
-  // Lesson date is required so lesson records are meaningful.
   if (!cleaned.lessonDate) {
     return { error: "Lesson date is required." };
   }
@@ -71,7 +77,15 @@ const validateAndCleanLessonInput = (body) => {
     return { error: "Lesson date is invalid." };
   }
 
-  // Duration must be a sensible positive number.
+  // Backend protection:
+  // Do not allow lessons to be created before today's date.
+  const today = startOfDay(new Date());
+  const lessonDate = startOfDay(cleaned.lessonDate);
+
+  if (lessonDate < today) {
+    return { error: "Lesson date cannot be in the past." };
+  }
+
   if (
     !Number.isFinite(cleaned.durationMinutes) ||
     cleaned.durationMinutes < 1 ||
@@ -82,7 +96,6 @@ const validateAndCleanLessonInput = (body) => {
     };
   }
 
-  // Rating is optional, but if present it must be between 1 and 5.
   if (
     cleaned.lessonRating !== null &&
     (!Number.isFinite(cleaned.lessonRating) ||
@@ -124,23 +137,15 @@ router.use(authMiddleware);
 /* =========================================================
    CREATE A NEW LESSON FOR A STUDENT
    POST /api/lessons
-
-   This creates a lesson only if:
-   - the request data is valid
-   - the student exists
-   - the student belongs to the logged-in instructor
    ========================================================= */
 router.post("/", async (req, res) => {
   try {
-    // Validate and clean all incoming lesson data.
     const { cleaned, error } = validateAndCleanLessonInput(req.body);
 
     if (error) {
       return res.status(400).json({ message: error });
     }
 
-    // Check that the student exists AND belongs to this instructor.
-    // This prevents one instructor adding lessons to another instructor's student.
     const studentExists = await Student.findOne({
       _id: cleaned.studentId,
       instructorId: req.user._id,
@@ -150,7 +155,6 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ message: "Student not found." });
     }
 
-    // Create the lesson and attach it to the logged-in instructor.
     const lesson = new Lesson({
       studentId: cleaned.studentId,
       instructorId: req.user._id,
@@ -177,21 +181,15 @@ router.post("/", async (req, res) => {
 /* =========================================================
    GET ALL LESSONS FOR A SPECIFIC STUDENT
    GET /api/lessons/student/:studentId
-
-   Only returns lessons that belong to:
-   - the selected student
-   - the logged-in instructor
    ========================================================= */
 router.get("/student/:studentId", async (req, res) => {
   try {
     const { studentId } = req.params;
 
-    // Validate student ID before querying MongoDB.
     if (!isValidObjectId(studentId)) {
       return res.status(400).json({ message: "Invalid student ID." });
     }
 
-    // Confirm the student belongs to the logged-in instructor.
     const studentExists = await Student.findOne({
       _id: studentId,
       instructorId: req.user._id,
@@ -201,7 +199,6 @@ router.get("/student/:studentId", async (req, res) => {
       return res.status(404).json({ message: "Student not found." });
     }
 
-    // Return only lessons owned by the logged-in instructor.
     const lessons = await Lesson.find({
       studentId,
       instructorId: req.user._id,

@@ -1,19 +1,17 @@
 import React, { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+
 const API_BASE_URL =
   process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function AddLesson() {
-  // Get student ID from the URL
   const { id } = useParams();
-
-  // Used to redirect after saving
   const navigate = useNavigate();
 
-  // ==========================================
-  // FORM STATE
-  // These are all lesson-level fields.
-  // ==========================================
+  // Today's date in YYYY-MM-DD format.
+  // Used to stop users selecting past lesson dates.
+  const today = new Date().toISOString().split("T")[0];
+
   const [formData, setFormData] = useState({
     lessonDate: "",
     durationMinutes: 60,
@@ -23,13 +21,9 @@ function AddLesson() {
     topicsCovered: "",
   });
 
-  // Store error messages
   const [error, setError] = useState("");
 
-  // ==========================================
-  // HANDLE INPUT CHANGES
-  // Updates the matching field in formData.
-  // ==========================================
+  // Updates form fields as the user types/selects.
   const handleChange = (e) => {
     setFormData((prev) => ({
       ...prev,
@@ -37,20 +31,24 @@ function AddLesson() {
     }));
   };
 
-  // ==========================================
-  // SUBMIT LESSON
-  // Sends lesson data to backend using auth token.
-  // ==========================================
+  // Submits lesson data to the backend.
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    // Build payload in the format backend expects
+    // Frontend protection: prevent past dates.
+    if (formData.lessonDate < today) {
+      setError("Lesson date cannot be in the past.");
+      return;
+    }
+
     const payload = {
       studentId: id,
       lessonDate: formData.lessonDate,
       durationMinutes: Number(formData.durationMinutes),
-      lessonRating: formData.lessonRating ? Number(formData.lessonRating) : undefined,
+      lessonRating: formData.lessonRating
+        ? Number(formData.lessonRating)
+        : undefined,
       nextLessonFocus: formData.nextLessonFocus,
       notes: formData.notes,
       topicsCovered: formData.topicsCovered
@@ -62,45 +60,42 @@ function AddLesson() {
     };
 
     try {
-   const response = await fetch(`${API_BASE_URL}/api/lessons`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${localStorage.getItem("token")}`,
-  },
-  body: JSON.stringify(payload),
-});
+      const response = await fetch(`${API_BASE_URL}/api/lessons`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-let data;
-const contentType = response.headers.get("content-type");
+      let data;
+      const contentType = response.headers.get("content-type");
 
-if (contentType && contentType.includes("application/json")) {
-  data = await response.json();
-} else {
-  const text = await response.text();
-  data = { message: text || "Failed to add lesson" };
-}
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = { message: text || "Failed to add lesson" };
+      }
 
-if (!response.ok) {
-  throw new Error(data.message || "Failed to add lesson");
-}
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to add lesson");
+      }
 
-      // Go back to student profile after successful save
       navigate(`/student/${id}`);
     } catch (err) {
       console.error(err);
-      setError(err.message);
+      setError(err.message || "Something went wrong");
     }
   };
 
   return (
     <div className="page">
-      {/* Top navigation */}
       <div className="top-nav">
         <Link to={`/student/${id}`}>← Back to Student Profile</Link>
       </div>
 
-      {/* Page header */}
       <div className="page-header">
         <div>
           <h1 className="title">Add Lesson</h1>
@@ -108,12 +103,10 @@ if (!response.ok) {
         </div>
       </div>
 
-      {/* Form card */}
       <div className="card" style={{ maxWidth: "700px" }}>
         {error && <div className="error">{error}</div>}
 
         <form onSubmit={handleSubmit}>
-          {/* Lesson Date */}
           <div className="form-group">
             <label>Lesson Date</label>
             <input
@@ -121,11 +114,11 @@ if (!response.ok) {
               name="lessonDate"
               value={formData.lessonDate}
               onChange={handleChange}
+              min={today}
               required
             />
           </div>
 
-          {/* Duration */}
           <div className="form-group">
             <label>Duration (minutes)</label>
             <input
@@ -134,10 +127,10 @@ if (!response.ok) {
               value={formData.durationMinutes}
               onChange={handleChange}
               min="1"
+              required
             />
           </div>
 
-          {/* Rating */}
           <div className="form-group">
             <label>Rating</label>
             <select
@@ -146,15 +139,14 @@ if (!response.ok) {
               onChange={handleChange}
             >
               <option value="">Select rating</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
+              <option value="1">1 - Poor</option>
+              <option value="2">2 - Needs work</option>
+              <option value="3">3 - Average</option>
+              <option value="4">4 - Good</option>
+              <option value="5">5 - Excellent</option>
             </select>
           </div>
 
-          {/* Next Focus */}
           <div className="form-group">
             <label>Next Focus</label>
             <input
@@ -166,7 +158,6 @@ if (!response.ok) {
             />
           </div>
 
-          {/* Topics Covered */}
           <div className="form-group">
             <label>Topics Covered</label>
             <input
@@ -178,7 +169,6 @@ if (!response.ok) {
             />
           </div>
 
-          {/* Notes */}
           <div className="form-group">
             <label>Notes</label>
             <textarea
@@ -189,7 +179,6 @@ if (!response.ok) {
             />
           </div>
 
-          {/* Action buttons */}
           <div className="actions">
             <button type="submit" className="button">
               Save Lesson
