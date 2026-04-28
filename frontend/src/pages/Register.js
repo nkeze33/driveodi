@@ -172,7 +172,17 @@ function Register() {
             Start your free trial and set up your instructor workspace.
           </p>
 
-          {error && <div className="error">{error}</div>}
+          {error && (
+  <div className="error">
+    {error}
+
+    {error.includes("already exists") && (
+      <div style={{ marginTop: "8px" }}>
+        <Link to="/login">Go to Login</Link>
+      </div>
+    )}
+  </div>
+)}
           {success && <div className="success">{success}</div>}
 
           <form onSubmit={handleSubmit}>
