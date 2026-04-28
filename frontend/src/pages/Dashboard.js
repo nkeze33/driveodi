@@ -30,20 +30,17 @@ function Dashboard() {
   const navigate = useNavigate();
   const user = getUser();
 
-  const locationText = [user?.city, user?.country]
-    .filter(Boolean)
-    .join(", ");
+  const locationText = [user?.city, user?.country].filter(Boolean).join(", ");
 
   // ==========================================
   // ACCESS RULE
-  // Only trialing and active users can use
-  // subscription-locked features
+  // Trialing and active users can use locked features.
   // ==========================================
-  const hasAccess =
-    subscription === "trialing" || subscription === "active";
+  const hasAccess = subscription === "trialing" || subscription === "active";
 
   // ==========================================
   // GET DAYS LEFT IN TRIAL
+  // Calculates remaining days from trialEndDate.
   // ==========================================
   const getDaysLeft = () => {
     if (!trialEndDate) return null;
@@ -58,8 +55,40 @@ function Dashboard() {
   const daysLeft = getDaysLeft();
 
   // ==========================================
+  // SUBSCRIPTION LABEL
+  // This is what appears beside "Subscription:"
+  // ==========================================
+  const getSubscriptionLabel = () => {
+    if (subscription === "trialing" && daysLeft !== null) {
+      return `Trial subscription active for ${daysLeft} day(s)`;
+    }
+
+    if (subscription === "trialing") {
+      return "Trial subscription active";
+    }
+
+    if (subscription === "active") {
+      return "Full subscription active";
+    }
+
+    if (subscription === "past_due") {
+      return "Payment failed — update billing";
+    }
+
+    if (subscription === "canceled") {
+      return "Subscription canceled";
+    }
+
+    if (subscription === "unpaid") {
+      return "Payment unpaid";
+    }
+
+    return "Inactive";
+  };
+
+  // ==========================================
   // LOAD CURRENT USER / BILLING STATE
-  // Keeps dashboard in sync with backend
+  // Keeps dashboard in sync with backend.
   // ==========================================
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -73,17 +102,22 @@ function Dashboard() {
         setSubscription(res.data.subscriptionStatus || "inactive");
         setTrialEndDate(res.data.trialEndDate || null);
 
-        // Keep local storage in sync with backend
+        // Keep local storage in sync with backend.
         updateUser(res.data);
       } catch (error) {
         console.error("Failed to fetch current user:", error);
+
+        if (error.response?.status === 401) {
+          logout();
+          navigate("/login");
+        }
       } finally {
         setLoadingUser(false);
       }
     };
 
     fetchCurrentUser();
-  }, []);
+  }, [navigate]);
 
   // ==========================================
   // LOAD STUDENTS
@@ -141,7 +175,7 @@ function Dashboard() {
     setNotice("");
 
     if (subscription === "active") {
-      setNotice("Your subscription is already active.");
+      setNotice("Your full subscription is already active.");
       return;
     }
 
@@ -154,25 +188,14 @@ function Dashboard() {
   const getBillingButtonText = () => {
     if (subscription === "trialing") return "Upgrade Now";
     if (subscription === "active") return "Subscription Active";
+    if (subscription === "past_due") return "Update Billing";
+    if (subscription === "unpaid") return "Update Billing";
     return "Start Subscription";
   };
 
   // ==========================================
-  // SUBSCRIPTION LABEL
-  // ==========================================
-  const getSubscriptionLabel = () => {
-    if (subscription === "trialing") return "Free Trial";
-    if (subscription === "active") return "Active";
-    if (subscription === "past_due") return "Payment Due";
-    if (subscription === "canceled") return "Canceled";
-    if (subscription === "unpaid") return "Unpaid";
-    return "Inactive";
-  };
-
-  // ==========================================
   // LOADING STATE
-  // Prevents wrong state from flashing before
-  // auth/me finishes loading
+  // Prevents wrong subscription state flashing.
   // ==========================================
   if (loadingUser) {
     return (
@@ -192,8 +215,8 @@ function Dashboard() {
           <h1 className="title">Dashboard</h1>
 
           <p className="subtitle">
-            Welcome{user?.name ? `, ${user.name}` : ""}. Manage your students and
-            lesson records.
+            Welcome{user?.name ? `, ${user.name}` : ""}. Manage your students
+            and lesson records.
           </p>
 
           {locationText && (
@@ -206,10 +229,24 @@ function Dashboard() {
             <strong>Subscription:</strong> {getSubscriptionLabel()}
           </div>
 
-          {subscription === "trialing" && daysLeft !== null && (
+          {subscription === "trialing" && daysLeft !== null && daysLeft <= 7 && (
             <div style={{ marginTop: "8px", fontWeight: "bold" }}>
-              Your trial ends in {daysLeft} day(s). A paid subscription will
-              start automatically after it ends.
+              Your trial is ending soon. Add or confirm your payment method to
+              continue without interruption.
+            </div>
+          )}
+
+          {(subscription === "past_due" || subscription === "unpaid") && (
+            <div style={{ marginTop: "8px", fontWeight: "bold" }}>
+              Your payment needs attention. Please update your billing details
+              to restore access.
+            </div>
+          )}
+
+          {subscription === "canceled" && (
+            <div style={{ marginTop: "8px", fontWeight: "bold" }}>
+              Your subscription has been canceled. Start a new subscription to
+              continue using Driveodi.
             </div>
           )}
 
