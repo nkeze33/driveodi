@@ -37,9 +37,15 @@ app.use(
 // Only allow your local frontend and live frontend.
 // No trailing slashes in origins.
 // ==========================================
+if (!allowedOrigins.includes(origin)) {
+  console.log("Blocked by CORS:", origin);
+  return callback(new Error("Not allowed by CORS"));
+}
+
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://dainty-sunflower-0652fc.netlify.app",
+  "https://driveodi.com",
+  "https://www.driveodi.com",
   process.env.CLIENT_URL,
 ].filter(Boolean);
 
