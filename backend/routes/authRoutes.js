@@ -133,7 +133,8 @@ router.post("/register", async (req, res) => {
 
     if (existingUser) {
       return res.status(400).json({
-        message: "Email already in use",
+        message:       "An account with this email already exists. Please log in.",
+,
       });
     }
 
