@@ -13,13 +13,10 @@ const router = express.Router();
 // HELPERS
 // ==========================================
 
-// Subscription statuses that should unlock app access.
 const hasAccessStatus = (status) => {
   return status === "trialing" || status === "active";
 };
 
-// Ensures required Stripe/URL environment variables exist.
-// This gives clear errors instead of silent checkout failures.
 const checkBillingEnv = () => {
   const requiredEnvVars = [
     "STRIPE_SECRET_KEY",
@@ -36,7 +33,6 @@ const checkBillingEnv = () => {
   return null;
 };
 
-// Ensures webhook secret exists before verifying Stripe webhook events.
 const checkWebhookEnv = () => {
   if (!process.env.STRIPE_WEBHOOK_SECRET) {
     return "Missing STRIPE_WEBHOOK_SECRET.";
@@ -45,7 +41,6 @@ const checkWebhookEnv = () => {
   return null;
 };
 
-// Builds the billing fields we store on the user record.
 const buildSubscriptionUpdate = (subscription) => ({
   stripeSubscriptionId: subscription.id,
   subscriptionStatus: subscription.status,
@@ -66,7 +61,6 @@ const buildSubscriptionUpdate = (subscription) => ({
 
 // ==========================================
 // CREATE CHECKOUT SESSION
-// POST /api/billing/create-checkout-session
 // ==========================================
 router.post("/create-checkout-session", requireAuth, async (req, res) => {
   try {
@@ -81,8 +75,6 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
 
     const user = await User.findById(req.user._id);
 
-    // startWithTrial must be boolean if provided.
-    // If omitted, we default to true.
     const startWithTrial =
       req.body.startWithTrial === undefined ? true : req.body.startWithTrial;
 
@@ -102,7 +94,6 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
       });
     }
 
-    // Prevent duplicate checkout if user already has usable access.
     if (user.stripeSubscriptionId && hasAccessStatus(user.subscriptionStatus)) {
       return res.status(400).json({
         message: "You already have an active or trial subscription.",
@@ -111,7 +102,6 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
 
     let customerId = user.stripeCustomerId;
 
-    // Create Stripe customer if user does not already have one.
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
@@ -128,19 +118,16 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
       });
     }
 
-    // Attach userId to subscription metadata so webhook can find the user.
     const subscriptionData = {
       metadata: {
         userId: user._id.toString(),
       },
     };
 
-    // Apply 30-day free trial unless explicitly disabled.
     if (startWithTrial) {
       subscriptionData.trial_period_days = 30;
     }
 
-    // Create Stripe Checkout session.
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -175,7 +162,6 @@ router.post("/create-checkout-session", requireAuth, async (req, res) => {
 
 // ==========================================
 // UPGRADE NOW
-// POST /api/billing/upgrade-now
 // ==========================================
 router.post("/upgrade-now", requireAuth, async (req, res) => {
   try {
@@ -225,7 +211,6 @@ router.post("/upgrade-now", requireAuth, async (req, res) => {
 
 // ==========================================
 // CREATE BILLING PORTAL SESSION
-// POST /api/billing/create-portal-session
 // ==========================================
 router.post("/create-portal-session", requireAuth, async (req, res) => {
   try {
@@ -263,7 +248,6 @@ router.post("/create-portal-session", requireAuth, async (req, res) => {
 
 // ==========================================
 // STRIPE WEBHOOK
-// POST /api/billing/webhook
 // ==========================================
 router.post("/webhook", async (req, res) => {
   let event;
@@ -282,7 +266,6 @@ router.post("/webhook", async (req, res) => {
       return res.status(400).send("Missing Stripe signature.");
     }
 
-    // Verifies that the event really came from Stripe.
     event = stripe.webhooks.constructEvent(
       req.body,
       signature,
@@ -297,19 +280,8 @@ router.post("/webhook", async (req, res) => {
 
   try {
     switch (event.type) {
-      // ==========================================
-      // CHECKOUT COMPLETED
-      // Immediately activates trial/paid access
-      // by retrieving the subscription from Stripe.
-      // ==========================================
       case "checkout.session.completed": {
         const session = event.data.object;
-
-        console.log("Checkout completed:", {
-          userId: session.metadata?.userId,
-          customer: session.customer,
-          subscription: session.subscription,
-        });
 
         if (!session.metadata?.userId) {
           console.error("Checkout session missing userId metadata.");
@@ -336,27 +308,14 @@ router.post("/webhook", async (req, res) => {
         break;
       }
 
-      // ==========================================
-      // SUBSCRIPTION CREATED / UPDATED
-      // Keeps DB synced with Stripe lifecycle changes.
-      // ==========================================
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const subscription = event.data.object;
-
-        console.log("Subscription event:", {
-          customer: subscription.customer,
-          subscriptionId: subscription.id,
-          status: subscription.status,
-          trialStart: subscription.trial_start,
-          trialEnd: subscription.trial_end,
-        });
 
         const userId = subscription.metadata?.userId;
 
         let updatedUser = null;
 
-        // Prefer direct lookup by userId from subscription metadata.
         if (userId) {
           updatedUser = await User.findByIdAndUpdate(
             userId,
@@ -368,7 +327,6 @@ router.post("/webhook", async (req, res) => {
           );
         }
 
-        // Fallback to Stripe customer ID.
         if (!updatedUser) {
           updatedUser = await User.findOneAndUpdate(
             { stripeCustomerId: subscription.customer },
@@ -386,31 +344,37 @@ router.post("/webhook", async (req, res) => {
 
       // ==========================================
       // PAYMENT SUCCESS
-      // Stripe may emit invoice.paid or
-      // invoice.payment_succeeded depending on setup.
+      // IMPORTANT:
+      // Do NOT blindly set subscriptionStatus to "active".
+      // During a trial, Stripe may send invoice.paid for a £0 invoice.
+      // We retrieve the real subscription status from Stripe instead.
       // ==========================================
       case "invoice.paid":
       case "invoice.payment_succeeded": {
         const invoice = event.data.object;
 
-        console.log("Payment successful for customer:", invoice.customer);
+        console.log("Invoice paid for customer:", invoice.customer);
 
-        const updatedUser = await User.findOneAndUpdate(
-          { stripeCustomerId: invoice.customer },
-          {
-            subscriptionStatus: "active",
-            isSubscriptionActive: true,
-          },
-          { new: true }
-        );
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(
+            invoice.subscription
+          );
 
-        console.log("User activated after payment:", updatedUser);
+          const updatedUser = await User.findOneAndUpdate(
+            { stripeCustomerId: invoice.customer },
+            {
+              stripeCustomerId: subscription.customer,
+              ...buildSubscriptionUpdate(subscription),
+            },
+            { new: true }
+          );
+
+          console.log("User synced after invoice payment:", updatedUser);
+        }
+
         break;
       }
 
-      // ==========================================
-      // PAYMENT FAILED
-      // ==========================================
       case "invoice.payment_failed": {
         const invoice = event.data.object;
 
@@ -427,9 +391,6 @@ router.post("/webhook", async (req, res) => {
         break;
       }
 
-      // ==========================================
-      // SUBSCRIPTION CANCELED / DELETED
-      // ==========================================
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
 
