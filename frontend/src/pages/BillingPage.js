@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 import { getToken, updateUser } from "../utils/auth";
 
@@ -11,9 +12,6 @@ function BillingPage() {
   const [trialEndDate, setTrialEndDate] = useState(null);
   const [message, setMessage] = useState("");
 
-  // ==========================================
-  // LOAD BILLING STATE
-  // ==========================================
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -25,7 +23,6 @@ function BillingPage() {
 
         setSubscriptionStatus(res.data.subscriptionStatus || "inactive");
         setTrialEndDate(res.data.trialEndDate || null);
-
         updateUser(res.data);
       } catch (error) {
         console.error("Failed to load billing state:", error);
@@ -36,9 +33,6 @@ function BillingPage() {
     fetchUser();
   }, []);
 
-  // ==========================================
-  // GET TRIAL DAYS LEFT
-  // ==========================================
   const getDaysLeft = () => {
     if (!trialEndDate) return null;
 
@@ -51,9 +45,6 @@ function BillingPage() {
 
   const daysLeft = getDaysLeft();
 
-  // ==========================================
-  // START FREE TRIAL
-  // ==========================================
   const handleStartTrial = async () => {
     try {
       setLoading(true);
@@ -78,9 +69,6 @@ function BillingPage() {
     }
   };
 
-  // ==========================================
-  // START PAID SUBSCRIPTION IMMEDIATELY
-  // ==========================================
   const handleStartPaidSubscription = async () => {
     try {
       setLoading(true);
@@ -110,9 +98,6 @@ function BillingPage() {
     }
   };
 
-  // ==========================================
-  // UPGRADE NOW
-  // ==========================================
   const handleUpgradeNow = async () => {
     try {
       setLoading(true);
@@ -130,7 +115,6 @@ function BillingPage() {
 
       setMessage(res.data.message || "Payment is being processed.");
 
-      // Refresh billing state after webhook has time to update DB
       setTimeout(async () => {
         try {
           const fresh = await axios.get(`${API_BASE_URL}/api/auth/me`, {
@@ -154,19 +138,56 @@ function BillingPage() {
     }
   };
 
-  // ==========================================
-  // ACTIVE STATE MESSAGE
-  // ==========================================
+  const handleManageBilling = async () => {
+    try {
+      setLoading(true);
+      setMessage("");
+
+      const res = await axios.post(
+        `${API_BASE_URL}/api/billing/create-portal-session`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+          },
+        }
+      );
+
+      window.location.href = res.data.url;
+    } catch (error) {
+      console.error(
+        "Manage billing error:",
+        error.response?.data || error.message
+      );
+      setMessage(error.response?.data?.message || "Failed to open billing.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (subscriptionStatus === "active") {
     return (
       <div style={styles.container}>
         <h1>Billing</h1>
+
         <div style={styles.card}>
           <h2>Subscription Active</h2>
           <p>Your account is already on an active paid subscription.</p>
-          <Link to="/dashboard" className="button" style={{ marginTop: "20px" }}>
-  Back to Dashboard
-</Link>
+
+          <div style={styles.buttonRow}>
+            <Link to="/dashboard" style={styles.linkButton}>
+              ← Back to Dashboard
+            </Link>
+
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              onClick={handleManageBilling}
+              disabled={loading}
+            >
+              {loading ? "Loading..." : "Manage Billing"}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -185,11 +206,13 @@ function BillingPage() {
         <div style={styles.card}>
           <h2>Choose Subscription Option</h2>
           <p>
-            You can either start a 30-day free trial or start a paid subscription immediately.
+            You can either start a 30-day free trial or start a paid
+            subscription immediately.
           </p>
 
           <div style={styles.buttonRow}>
             <button
+              type="button"
               style={styles.primaryBtn}
               onClick={handleStartTrial}
               disabled={loading}
@@ -198,34 +221,57 @@ function BillingPage() {
             </button>
 
             <button
+              type="button"
               style={styles.secondaryBtn}
               onClick={handleStartPaidSubscription}
               disabled={loading}
             >
               {loading ? "Loading..." : "Start Paid Subscription"}
             </button>
+
+            <Link to="/dashboard" style={styles.linkButton}>
+              ← Back to Dashboard
+            </Link>
           </div>
         </div>
       )}
 
       {subscriptionStatus === "trialing" && (
         <div style={styles.card}>
-          <h2>Free Trial</h2>
+          <h2>Free Trial Active</h2>
+
           <p>
             Your trial ends in <strong>{daysLeft}</strong> day(s).
           </p>
+
           <p>
-            A paid subscription will begin automatically after the trial ends.
-            If you want to move to paid immediately, click below.
+            A paid subscription will begin automatically after the trial ends. If
+            you want to move to paid immediately, click below.
           </p>
 
-          <button
-            style={styles.primaryBtn}
-            onClick={handleUpgradeNow}
-            disabled={loading}
-          >
-            {loading ? "Processing..." : "Upgrade Now"}
-          </button>
+          <div style={styles.buttonRow}>
+            <button
+              type="button"
+              style={styles.primaryBtn}
+              onClick={handleUpgradeNow}
+              disabled={loading}
+            >
+              {loading ? "Processing..." : "Upgrade Now"}
+            </button>
+
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              onClick={handleManageBilling}
+              disabled={loading}
+            >
+              {loading ? "Loading..." : "Manage Billing"}
+            </button>
+
+            <Link to="/dashboard" style={styles.linkButton}>
+              ← Back to Dashboard
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -249,6 +295,7 @@ const styles = {
     display: "flex",
     gap: "12px",
     flexWrap: "wrap",
+    marginTop: "20px",
   },
   primaryBtn: {
     background: "#28a745",
@@ -257,6 +304,7 @@ const styles = {
     padding: "12px 20px",
     borderRadius: "6px",
     cursor: "pointer",
+    fontWeight: "bold",
   },
   secondaryBtn: {
     background: "#007bff",
@@ -265,6 +313,16 @@ const styles = {
     padding: "12px 20px",
     borderRadius: "6px",
     cursor: "pointer",
+    fontWeight: "bold",
+  },
+  linkButton: {
+    display: "inline-block",
+    background: "#fff",
+    color: "#111",
+    textDecoration: "none",
+    padding: "12px 20px",
+    borderRadius: "6px",
+    fontWeight: "bold",
   },
   message: {
     marginBottom: "16px",
