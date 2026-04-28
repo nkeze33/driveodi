@@ -164,6 +164,9 @@ function BillingPage() {
         <div style={styles.card}>
           <h2>Subscription Active</h2>
           <p>Your account is already on an active paid subscription.</p>
+          <Link to="/dashboard" className="button" style={{ marginTop: "20px" }}>
+  Back to Dashboard
+</Link>
         </div>
       </div>
     );
