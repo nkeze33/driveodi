@@ -52,8 +52,9 @@ const buildSafeUser = (user) => ({
   city: user.location?.city || "",
   country: user.location?.country || "",
   isEmailVerified: user.isEmailVerified || false,
-  subscriptionStatus: user.subscriptionStatus || "inactive",
-  isSubscriptionActive: user.isSubscriptionActive || false,
+  subscriptionStatus: user.subscriptionStatus || "trialing",
+  isSubscriptionActive: user.isSubscriptionActive === true,
+  trialStartDate: user.trialStartDate || null,
   trialEndDate: user.trialEndDate || null,
 });
 
@@ -133,7 +134,7 @@ router.post("/register", async (req, res) => {
 
     if (existingUser) {
       return res.status(400).json({
-        message:       "An account with this email already exists. Please log in.",
+        message: "An account with this email already exists. Please log in.",
 
       });
     }
@@ -162,11 +163,12 @@ router.post("/register", async (req, res) => {
       emailVerificationToken: verificationToken,
       emailVerificationExpires: verificationExpires,
 
-      // Subscription defaults.
-      subscriptionStatus: "inactive",
-      isSubscriptionActive: false,
-      trialStartDate: null,
-      trialEndDate: null,
+      // App trial defaults.
+      // New users get 30 days free without entering card details.
+      subscriptionStatus: "trialing",
+      isSubscriptionActive: true,
+      trialStartDate: new Date(),
+      trialEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       stripeCustomerId: "",
       stripeSubscriptionId: "",
     });
@@ -265,7 +267,7 @@ router.post("/resend-verification", async (req, res) => {
       });
     }
 
-  const user = await User.findOne({ email }).select("+password");
+    const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
       return res.status(404).json({

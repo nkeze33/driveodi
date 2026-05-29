@@ -122,11 +122,23 @@ const validateAndCleanStudentInput = (body) => {
 // Protect all routes
 router.use(authMiddleware);
 
+const requireActiveSubscription = (req, res, next) => {
+  if (!req.user.isSubscriptionActive) {
+    return res.status(403).json({
+      message:
+        "Your free trial has expired. Please subscribe to continue using DriveODI.",
+    });
+  }
+
+  next();
+};
+
 /* =========================================================
    CREATE A NEW STUDENT
    POST /api/students
    ========================================================= */
-router.post("/", async (req, res) => {
+
+router.post("/", requireActiveSubscription, async (req, res) => {
   try {
     const { cleaned, error } = validateAndCleanStudentInput(req.body);
 
@@ -245,7 +257,7 @@ router.get("/:id", async (req, res) => {
    UPDATE STUDENT
    PUT /api/students/:id
    ========================================================= */
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireActiveSubscription, async (req, res) => {
   try {
     const { cleaned, error } = validateAndCleanStudentInput(req.body);
 
@@ -288,7 +300,8 @@ router.put("/:id", async (req, res) => {
    DELETE STUDENT
    DELETE /api/students/:id
    ========================================================= */
-router.delete("/:id", async (req, res) => {
+
+router.delete("/:id", requireActiveSubscription, async (req, res) => {
   try {
     const deletedStudent = await Student.findOneAndDelete({
       _id: req.params.id,

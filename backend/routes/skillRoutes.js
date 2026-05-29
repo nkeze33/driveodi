@@ -98,7 +98,16 @@ const validateAndCleanSkills = (skills) => {
 // Every route below requires a valid JWT.
 // ==========================================
 router.use(authMiddleware);
+const requireActiveSubscription = (req, res, next) => {
+  if (!req.user.isSubscriptionActive) {
+    return res.status(403).json({
+      message:
+        "Your free trial has expired. Please subscribe to continue using DriveODI.",
+    });
+  }
 
+  next();
+};
 /* =========================================================
    CREATE DEFAULT SKILL PROGRESS FOR A STUDENT
    POST /api/skills
@@ -109,7 +118,8 @@ router.use(authMiddleware);
    - the student belongs to the logged-in instructor
    - a skill progress record does not already exist
    ========================================================= */
-router.post("/", async (req, res) => {
+  
+router.post("/", requireActiveSubscription, async (req, res) => {
   try {
     const studentId = String(req.body.studentId || "").trim();
 
@@ -227,7 +237,7 @@ router.get("/student/:studentId", async (req, res) => {
    Creates if record does not exist yet.
    Only allowed skill names and allowed values are accepted.
    ========================================================= */
-router.put("/student/:studentId", async (req, res) => {
+router.put("/student/:studentId", requireActiveSubscription, async (req, res) => {
   try {
     const studentId = String(req.params.studentId || "").trim();
 

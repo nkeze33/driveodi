@@ -9,6 +9,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      minlength: 2,
+      maxlength: 80,
     },
 
     email: {
@@ -17,15 +19,20 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: 120,
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid email address"],
     },
 
+    // Stored as hashed password only
     password: {
       type: String,
       required: true,
+      select: false,
     },
 
     role: {
       type: String,
+      enum: ["instructor", "admin"],
       default: "instructor",
       trim: true,
     },
@@ -38,11 +45,13 @@ const userSchema = new mongoose.Schema(
         type: String,
         default: "",
         trim: true,
+        maxlength: 80,
       },
       country: {
         type: String,
         default: "",
         trim: true,
+        maxlength: 80,
       },
     },
 
@@ -70,11 +79,13 @@ const userSchema = new mongoose.Schema(
     emailVerificationToken: {
       type: String,
       default: "",
+      select: false,
     },
 
     emailVerificationExpires: {
       type: Date,
       default: null,
+      select: false,
     },
 
     // ==================================================
@@ -83,11 +94,13 @@ const userSchema = new mongoose.Schema(
     stripeCustomerId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     stripeSubscriptionId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     subscriptionStatus: {
@@ -99,12 +112,14 @@ const userSchema = new mongoose.Schema(
         "past_due",
         "canceled",
         "unpaid",
+        "expired"
       ],
-      default: "inactive",
+      default: "trialing",
     },
 
     subscriptionPlan: {
       type: String,
+      enum: ["monthly"],
       default: "monthly",
     },
 
@@ -125,12 +140,20 @@ const userSchema = new mongoose.Schema(
 
     isSubscriptionActive: {
       type: Boolean,
-      default: false,
+      default: true,
     },
   },
   {
     timestamps: true,
   }
 );
+
+// ==================================================
+// INDEXES
+// Speeds up common lookups and enforces uniqueness
+// ==================================================
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ stripeCustomerId: 1 });
+userSchema.index({ stripeSubscriptionId: 1 });
 
 module.exports = mongoose.model("User", userSchema);

@@ -133,12 +133,23 @@ const validateAndCleanLessonInput = (body) => {
 // Every route below requires a valid JWT token.
 // ==========================================
 router.use(authMiddleware);
+const requireActiveSubscription = (req, res, next) => {
+  if (!req.user.isSubscriptionActive) {
+    return res.status(403).json({
+      message:
+        "Your free trial has expired. Please subscribe to continue using DriveODI.",
+    });
+  }
+
+  next();
+};
 
 /* =========================================================
    CREATE A NEW LESSON FOR A STUDENT
    POST /api/lessons
    ========================================================= */
-router.post("/", async (req, res) => {
+  
+router.post("/", requireActiveSubscription, async (req, res) => {
   try {
     const { cleaned, error } = validateAndCleanLessonInput(req.body);
 

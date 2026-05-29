@@ -26,6 +26,19 @@ const requireAuth = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
+    // ============================================
+    // AUTO EXPIRE TRIALS
+    // ============================================
+    if (
+      user.subscriptionStatus === "trialing" &&
+      user.trialEndDate &&
+      user.trialEndDate < new Date()
+    ) {
+      user.subscriptionStatus = "expired";
+      user.isSubscriptionActive = false;
+
+      await user.save();
+    }
 
     req.user = user;
     next();
