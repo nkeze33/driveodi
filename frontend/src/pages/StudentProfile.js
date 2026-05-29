@@ -277,6 +277,12 @@ function StudentProfile() {
           >
             Update Skills
           </Link>
+          <Link
+            to={`/schedule-lesson?studentId=${student._id}`}
+            className="button"
+          >
+            Schedule Lesson
+          </Link>
 
           <Link to={`/student/${id}/edit`} className="button-secondary">
             Edit Student
@@ -331,7 +337,7 @@ function StudentProfile() {
                     <span className="label">Next Focus</span>
                     <div className="value">
                       {lesson.nextLessonFocus &&
-                      lesson.nextLessonFocus.trim() !== ""
+                        lesson.nextLessonFocus.trim() !== ""
                         ? lesson.nextLessonFocus
                         : "Not recorded"}
                     </div>

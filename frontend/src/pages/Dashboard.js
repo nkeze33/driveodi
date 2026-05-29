@@ -312,6 +312,7 @@ function Dashboard() {
 
         {/* ACTION BUTTONS */}
         <div className="actions">
+          
           {hasAccess ? (
             <Link to="/add-student" className="button">
               + Add Student
