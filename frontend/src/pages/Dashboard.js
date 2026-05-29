@@ -27,7 +27,7 @@ function Dashboard() {
   const [trialEndDate, setTrialEndDate] = useState(null);
   const [notice, setNotice] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
-  
+
 
   const navigate = useNavigate();
   const user = getUser();
@@ -163,28 +163,28 @@ function Dashboard() {
   }, [navigate]);
 
   useEffect(() => {
-  const fetchUpcomingLessons = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/lessons/upcoming`, {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-        },
-      });
+    const fetchUpcomingLessons = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/scheduled-lessons/upcoming`, {
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+          },
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to load upcoming lessons");
+        if (!res.ok) {
+          throw new Error(data.message || "Failed to load upcoming lessons");
+        }
+
+        setUpcomingLessons(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load upcoming lessons:", err);
       }
+    };
 
-      setUpcomingLessons(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to load upcoming lessons:", err);
-    }
-  };
-
-  fetchUpcomingLessons();
-}, []);
+    fetchUpcomingLessons();
+  }, []);
 
   // ==========================================
   // LOGOUT
@@ -355,37 +355,42 @@ function Dashboard() {
       </div>
 
       <div className="card">
-  <h2>Upcoming Lessons</h2>
+        <h2>Upcoming Lessons</h2>
 
-  {upcomingLessons.length === 0 ? (
-    <p className="empty-text">No upcoming lessons yet.</p>
-  ) : (
-    upcomingLessons.map((lesson) => (
-      <div key={lesson._id} className="student-list-item">
-        <div>
-          <strong>
-            {lesson.studentId?.fullName || "Unknown Student"}
-          </strong>
+        {upcomingLessons.length === 0 ? (
+          <p className="empty-text">No upcoming lessons yet.</p>
+        ) : (
+          upcomingLessons.map((lesson) => (
+            <div key={lesson._id} className="student-list-item">
+              <div>
+                <strong>
+                  {lesson.studentId?.fullName || "Unknown Student"}
+                </strong>
 
-          <p style={{ margin: "4px 0 0", fontSize: "0.9rem" }}>
-            {new Date(lesson.lessonDate).toLocaleDateString("en-GB", {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </p>
+                <p style={{ margin: "4px 0 0", fontSize: "0.9rem" }}>
+                  {new Date(lesson.lessonDate).toLocaleDateString("en-GB", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}{" "}
+                  at {lesson.lessonTime}
+                </p>
 
-          {lesson.nextLessonFocus && (
-            <p style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
-              Focus: {lesson.nextLessonFocus}
-            </p>
-          )}
-        </div>
+                <p style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
+                  Duration: {lesson.durationMinutes} minutes
+                </p>
+
+                {lesson.nextLessonFocus && (
+                  <p style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
+                    Focus: {lesson.nextLessonFocus}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </div>
-    ))
-  )}
-</div>
 
       {/* STUDENTS LIST */}
       <div className="card">
