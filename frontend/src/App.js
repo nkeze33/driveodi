@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
+import ScheduleLesson from "./pages/ScheduleLesson";
 import StudentProfile from "./pages/StudentProfile";
 import AddStudent from "./pages/AddStudent";
 import AddLesson from "./pages/AddLesson";
@@ -137,6 +138,14 @@ function App() {
           element={
             <ProtectedRoute>
               <BillingCancel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/schedule-lesson"
+          element={
+            <ProtectedRoute>
+              <ScheduleLesson />
             </ProtectedRoute>
           }
         />
