@@ -14,6 +14,7 @@ const studentRoutes = require("./routes/studentRoutes");
 const lessonRoutes = require("./routes/lessonRoutes");
 const skillRoutes = require("./routes/skillRoutes");
 const billingRoutes = require("./routes/billingRoutes");
+const scheduledLessonRoutes = require("./routes/scheduledLessonRoutes");
 
 const app = express();
 
@@ -22,7 +23,7 @@ const app = express();
 // Required on Render so express-rate-limit can read
 // the real client IP correctly.
 // ======================================================
-app.set("trust proxy", 1);
+app.set("trust proxy", 1); 
 
 // ======================================================
 // CONNECT TO DATABASE
@@ -164,6 +165,7 @@ app.use("/api/students", studentRoutes);
 app.use("/api/lessons", lessonRoutes);
 app.use("/api/skills", skillRoutes);
 app.use("/api/billing", billingRoutes);
+app.use("/api/scheduled-lessons", scheduledLessonRoutes);
 
 // ======================================================
 // 404 HANDLER
