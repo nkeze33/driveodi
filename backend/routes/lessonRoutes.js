@@ -188,7 +188,31 @@ router.post("/", requireActiveSubscription, async (req, res) => {
     });
   }
 });
+/* =========================================================
+   GET UPCOMING LESSONS
+   GET /api/lessons/upcoming
+   ========================================================= */
+router.get("/upcoming", async (req, res) => {
+  try {
+    const now = new Date();
 
+    const lessons = await Lesson.find({
+      instructorId: req.user._id,
+      lessonDate: { $gte: now },
+    })
+      .populate("studentId", "fullName")
+      .sort({ lessonDate: 1 })
+      .limit(5);
+
+    return res.json(lessons);
+  } catch (error) {
+    console.error("Get upcoming lessons error:", error.message);
+
+    return res.status(500).json({
+      message: "Failed to load upcoming lessons.",
+    });
+  }
+});
 /* =========================================================
    GET ALL LESSONS FOR A SPECIFIC STUDENT
    GET /api/lessons/student/:studentId

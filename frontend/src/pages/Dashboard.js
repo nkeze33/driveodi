@@ -22,10 +22,12 @@ function Dashboard() {
   // STATE
   // ==========================================
   const [students, setStudents] = useState([]);
+  const [upcomingLessons, setUpcomingLessons] = useState([]);
   const [subscription, setSubscription] = useState("inactive");
   const [trialEndDate, setTrialEndDate] = useState(null);
   const [notice, setNotice] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
+  
 
   const navigate = useNavigate();
   const user = getUser();
@@ -160,6 +162,30 @@ function Dashboard() {
     fetchStudents();
   }, [navigate]);
 
+  useEffect(() => {
+  const fetchUpcomingLessons = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/lessons/upcoming`, {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to load upcoming lessons");
+      }
+
+      setUpcomingLessons(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load upcoming lessons:", err);
+    }
+  };
+
+  fetchUpcomingLessons();
+}, []);
+
   // ==========================================
   // LOGOUT
   // ==========================================
@@ -187,6 +213,7 @@ function Dashboard() {
   // ==========================================
   const getBillingButtonText = () => {
     if (subscription === "trialing") return "Upgrade Now";
+    if (subscription === "expired") return "Subscribe Now";
     if (subscription === "active") return "Subscription Active";
     if (subscription === "past_due") return "Update Billing";
     if (subscription === "unpaid") return "Update Billing";
@@ -229,12 +256,38 @@ function Dashboard() {
             <strong>Subscription:</strong> {getSubscriptionLabel()}
           </div>
 
-          {subscription === "trialing" && daysLeft !== null && daysLeft <= 7 && (
-            <div style={{ marginTop: "8px", fontWeight: "bold" }}>
-              Your trial is ending soon. Add or confirm your payment method to
-              continue without interruption.
+          {subscription === "trialing" && daysLeft !== null && (
+            <div
+              style={{
+                marginTop: "14px",
+                padding: "14px",
+                borderRadius: "12px",
+                background: daysLeft <= 7 ? "#fff4e5" : "#eef7f1",
+                border: daysLeft <= 7 ? "1px solid #f0c36d" : "1px solid #c7e6d0",
+                fontWeight: "600",
+              }}
+            >
+              Free trial active — you have {daysLeft} day
+              {daysLeft === 1 ? "" : "s"} remaining.
             </div>
           )}
+
+          {subscription === "expired" && (
+            <div
+              style={{
+                marginTop: "14px",
+                padding: "14px",
+                borderRadius: "12px",
+                background: "#fff1f1",
+                border: "1px solid #f0bcbc",
+                fontWeight: "600",
+              }}
+            >
+              Your free trial has expired. Subscribe to continue adding students,
+              lessons, and skill updates.
+            </div>
+          )}
+
 
           {(subscription === "past_due" || subscription === "unpaid") && (
             <div style={{ marginTop: "8px", fontWeight: "bold" }}>
@@ -271,7 +324,7 @@ function Dashboard() {
                 background: "#999",
                 cursor: "not-allowed",
               }}
-              title="Start a subscription to unlock this feature"
+              title="Your free trial has expired. Subscribe to unlock this feature."
             >
               🔒 Add Student
             </button>
@@ -300,6 +353,39 @@ function Dashboard() {
         <h2>Total Students</h2>
         <h1 className="stat-number">{students.length}</h1>
       </div>
+
+      <div className="card">
+  <h2>Upcoming Lessons</h2>
+
+  {upcomingLessons.length === 0 ? (
+    <p className="empty-text">No upcoming lessons yet.</p>
+  ) : (
+    upcomingLessons.map((lesson) => (
+      <div key={lesson._id} className="student-list-item">
+        <div>
+          <strong>
+            {lesson.studentId?.fullName || "Unknown Student"}
+          </strong>
+
+          <p style={{ margin: "4px 0 0", fontSize: "0.9rem" }}>
+            {new Date(lesson.lessonDate).toLocaleDateString("en-GB", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </p>
+
+          {lesson.nextLessonFocus && (
+            <p style={{ margin: "4px 0 0", fontSize: "0.85rem" }}>
+              Focus: {lesson.nextLessonFocus}
+            </p>
+          )}
+        </div>
+      </div>
+    ))
+  )}
+</div>
 
       {/* STUDENTS LIST */}
       <div className="card">
